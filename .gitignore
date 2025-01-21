@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Pipenv files
+Pipfile
+Pipfile.lock
+
+# Environment variables
+*.env
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs and debug files
+*.log
+
+# Python package files
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Miscellaneous
+*.swp
+*.swo
+*~

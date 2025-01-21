@@ -22,4 +22,4 @@ COPY . .
 EXPOSE 7860
 
 # Run the application
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port 7860 & python tele_bot.py"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

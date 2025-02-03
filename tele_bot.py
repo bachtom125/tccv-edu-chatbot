@@ -3,6 +3,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 import aiohttp
 import os
 from dotenv import load_dotenv
+from telegram.constants import ZERO_DATE, MessageAttachmentType, ParseMode
+from pipeline.utils import convert_bold_to_html
 
 load_dotenv()
 TELEGRAM_API = os.getenv("TELEGRAM_API_KEY")
@@ -23,12 +25,12 @@ def check_internet():
         return False
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f'Hello {update.effective_user.first_name}')
+    await update.message.reply_text(convert_bold_to_html(f"Hello **{update.effective_user.first_name}**"), parse_mode=ParseMode.HTML)
     
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_message = update.message.text
     response = await query_backend(user_message)
-    await update.message.reply_text(response)
+    await update.message.reply_text(convert_bold_to_html(response), parse_mode=ParseMode.HTML)
 
 async def query_backend(user_message):
     async with aiohttp.ClientSession() as session:

@@ -1,14 +1,14 @@
 import pinecone
 from pinecone import Pinecone
 from langchain_openai import ChatOpenAI
-from .embeddings import HuggingFaceEmbeddings
-from langchain.prompts import PromptTemplate
+from pipeline.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSequence, RunnableLambda
 from langchain_pinecone import PineconeVectorStore
 import re
 import os
 from dotenv import load_dotenv
+from pipeline.utils import convert_bold_to_html
 
 load_dotenv()
 PINECONE_API = os.getenv("PINECONE_API_KEY")
@@ -17,25 +17,61 @@ OPENAI_API = os.getenv("OPENAI_API_KEY")
 
 # Initialize Pinecone
 pinecone = Pinecone(api_key=PINECONE_API)
-index = pinecone.Index("education-file-chunks")
+chunk_index = pinecone.Index("education-file-chunks")
+file_info_index = pinecone.Index("education-file-info")
 
 # Use your custom embeddings class
 embedding_model = HuggingFaceEmbeddings()
-vectorstore = PineconeVectorStore(index=index, embedding=embedding_model, text_key='text')
+
+# Create a vector store for chunks
+chunk_vectorstore = PineconeVectorStore(
+    index=chunk_index, 
+    embedding=embedding_model, 
+    text_key='text'
+)
+
+# Create a vector store for file info (summaries)
+file_info_vectorstore = PineconeVectorStore(
+    index=file_info_index, 
+    embedding=embedding_model, 
+    text_key='id'
+)
 
 # Chain to use the LLM with the prompt
-llm_for_query = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=OPENAI_API)
-llm_for_response = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=OPENAI_API)
+llm_for_query = ChatOpenAI(model_name="gpt-4o-mini", 
+                           openai_api_key=OPENAI_API)
+llm_for_response = ChatOpenAI(model_name="gpt-4o-mini", 
+                              openai_api_key=OPENAI_API)
 
-def query_vectorstore(user_query: str, top_k: int = 3):
+def query_vectorstore(vectorstore: PineconeVectorStore, user_query: str, top_k: int = 3, **kwargs):
     # Step 1: Query Pinecone
-    results = vectorstore.similarity_search(user_query, k=top_k)
+    results = vectorstore.similarity_search(user_query, k=top_k, **kwargs)
     if not results:
         return "No relevant results found."
 
-    print(f"Raw Query Results: {results}")
-    context = '\n'.join([doc.page_content for doc in results])
-    return context
+    return results
+
+def query_for_file(user_query: str, top_k: int = 3):
+    """
+    Query the vector store for file info (summaries) and return the top_k file_ids.
+    """
+    query_res = query_vectorstore(file_info_vectorstore, user_query, top_k)
+
+    file_ids = [doc.page_content for doc in query_res]
+    return file_ids
+
+def query_for_chunks(user_query: str, file_ids: list[str], top_k: int = 3):
+    """
+    Given the target file_ids, query the vector store for top_k chunks FOR EACH FILE.
+    """
+
+    # Pass a filter to restrict the search to the identified files.
+    final_chunks = []
+    for file_id in file_ids:
+        query_res = query_vectorstore(chunk_vectorstore, user_query, top_k, filter={"file_path": file_id})
+        chunks = [doc.page_content for doc in query_res]
+        final_chunks.extend(chunks)
+    return final_chunks
 
 # Define the prompt template
 query_prompt_template = PromptTemplate(
@@ -43,14 +79,11 @@ query_prompt_template = PromptTemplate(
     template=(
         "You are an advanced query assistant with expertise in carbon credits. "
         "Analyze the user's input to construct a meaningful, contextually complete query that can be vectorized for semantic similarity search. "
-        "For clarity, you can break the input into meaningful components for easy similarity search. "
-        "Ensure the query is well-structured, includes all relevant context, and is cleaned of special characters and converted to lowercase. \n\n"
-        "Additionally, determine a suitable value for top_k (<= 7). This is the number of vectors (each corresponds to around 230 words) to retrieve from the database. "
-        "If the query is very broad, suggest a higher top_k (5 - 7). If it is specific, suggest a lower top_k (2 - 4).\n\n"
+        "For clarity, you can break the input into clear and meaningful components for easy similarity search. "
+        "Ensure the query is well-structured, includes all relevant information needed, and is cleaned of special characters and converted to lowercase. \n\n"
         "User Input: {user_query}\n"
-        "Construct a clean and complete query and suggest top_k in the following format:\n\n"
+        "Construct the query in the following format:\n\n"
         "Query: <constructed query>\n"
-        "Top_k: <number>"
     )
 )
 
@@ -58,7 +91,7 @@ query_prompt_template = PromptTemplate(
 response_generation_prompt = PromptTemplate(
     input_variables=["context", "user_query"],
     template=(
-        "You are an expert with strong expertise in carbon credits. Based on the following context, respond to the user's query:\n\n"
+        "You are an expert with strong expertise in carbon credits. Based on the following context, respond to the user's query. Try to give a very long response that is as detailed as possible, with lots of information. And remember to be factual:\n\n"
         "Context: {context}\n\n"
         "User Query: {user_query}\n\n"
         "Response:"
@@ -69,65 +102,66 @@ def debug_step(name):
     """Debug function to print the state of variables."""
     return RunnableLambda(func=lambda inputs: {**inputs, "debug": print(f"{name}: {inputs}")})
 
-query_chain = (
-    RunnableLambda(
-        func=lambda inputs: {
-            "formatted_prompt": query_prompt_template.format(user_query=inputs["user_query"]),
-            "user_query": inputs['user_query']
-        }
-    )
-    | debug_step("After Query Formatting")
-    | RunnableLambda(
-        func=lambda inputs: {
-            "llm_response": llm_for_query.predict(inputs["formatted_prompt"]),
-            "user_query": inputs['user_query']
-        }
-    )
-    | debug_step("After LLM Query")
-    | RunnableLambda(
-        func=lambda inputs: {
-            # Parse the query and top_k from the LLM response
-            **inputs,
-            "llm_query": re.search(r"Query:\s*(.+)", inputs["llm_response"]).group(1).strip(),
-            "top_k": min(6, int(re.search(r"Top_k:\s*(\d+)", inputs["llm_response"]).group(1).strip())),
-        }
-    )
-    | debug_step("After Parsing Query and Top_k")
+# Chain step 1: Retrieve file IDs (5 most relevant files)
+file_query_chain = RunnableLambda(
+    func=lambda inputs: {
+        "file_ids": query_for_file(
+            user_query=inputs["user_query"],
+            top_k=5  # Query 5 most relevant files
+        ),
+        "user_query": inputs["user_query"]
+    }
 )
 
-vector_search_chain = (
-    RunnableLambda(
-        func=lambda inputs: {
-            "context": query_vectorstore(inputs['llm_query'], top_k=inputs['top_k']),
-            "user_query": inputs['user_query']
-        }
-    )
-    | debug_step("After Vector Search")
+# Chain step 2: For the retrieved file IDs, query for chunks (3 best matching chunks per file)
+chunks_query_chain = RunnableLambda(
+    func=lambda inputs: {
+        "chunks": query_for_chunks(
+            user_query=inputs["user_query"],
+            file_ids=inputs["file_ids"],
+            top_k=3  # Query 3 best-matching chunks per file
+        ),
+        "user_query": inputs["user_query"],
+        "consulted_files": [file_id.removeprefix("/content/drive/MyDrive/") for file_id in inputs["file_ids"]]
+    }
 )
 
-response_chain = (
-    RunnableLambda(
-        func=lambda inputs: {
-            "response_prompt": response_generation_prompt.format(
-                context=inputs["context"],
-                user_query=inputs["user_query"]
-            )
-        }
-    )
-    | debug_step("After Response Prompt Formatting")
-    | RunnableLambda(
-        func=lambda inputs: {
-            "response": llm_for_response.predict(inputs["response_prompt"]),
-            **inputs
-        }
-    )
-    | debug_step("Final Response")
+# Chain step 3: Aggregate the chunks to form the context
+aggregation_chain = RunnableLambda(
+    func=lambda inputs: {
+        "context": "\n".join(inputs["chunks"]),
+        "user_query": inputs["user_query"],
+        "consulted_files": inputs["consulted_files"]
+    }
 )
 
-full_chain = query_chain | vector_search_chain | response_chain
+# Chain step 4: Generate the final response using the aggregated context and the original user query
+response_chain = RunnableLambda(
+    func=lambda inputs: {
+        "response_prompt": response_generation_prompt.format(
+            context=inputs["context"],
+            user_query=inputs["user_query"]
+        ),
+        "consulted_files": inputs["consulted_files"]
+
+    }
+) | RunnableLambda(
+    func=lambda inputs: {
+        "response": llm_for_response.predict(
+            response_prompt=inputs["response_prompt"]
+        ),
+        **inputs
+    }
+)
+
+# Combine all the chains to form the full workflow
+full_chain = file_query_chain | chunks_query_chain | aggregation_chain | response_chain
 print("First intialization")
 
 def generate_response(user_query: str):
     # Run the full chain
     result = full_chain.invoke(input={"user_query": user_query})
-    return result["response"]
+    response = result["response"]
+    consulted_files = result["consulted_files"]
+    final_response = response + f"\n\n Nguồn thông tin: {'\n- '.join(consulted_files)}"
+    return final_response

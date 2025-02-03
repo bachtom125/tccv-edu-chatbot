@@ -17,10 +17,8 @@ class HuggingFaceEmbeddings(Embeddings):
     def normalize_embeddings(self, embeddings):
         """
         Normalize embeddings to unit vectors.
-
         Args:
             embeddings (numpy.ndarray): Array of embeddings (n_samples, n_features).
-
         Returns:
             numpy.ndarray: Normalized embeddings.
         """

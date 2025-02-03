@@ -83,7 +83,7 @@ query_prompt_template = PromptTemplate(
         "Ensure the query is well-structured, includes all relevant information needed, and is cleaned of special characters and converted to lowercase. \n\n"
         "User Input: {user_query}\n"
         "Construct the query in the following format:\n\n"
-        "Query: <constructed query>\n"
+        "Constructed Query:\n"
     )
 )
 
@@ -102,27 +102,41 @@ def debug_step(name):
     """Debug function to print the state of variables."""
     return RunnableLambda(func=lambda inputs: {**inputs, "debug": print(f"{name}: {inputs}")})
 
-# Chain step 1: Retrieve file IDs (5 most relevant files)
-file_query_chain = RunnableLambda(
+# New chain step: Refine the user query using llm_for_query and the query prompt.
+refine_query_chain = RunnableLambda(
     func=lambda inputs: {
-        "file_ids": query_for_file(
-            user_query=inputs["user_query"],
-            top_k=5  # Query 5 most relevant files
-        ),
+        "refined_query": re.search(
+            r"Constructed Query:\s*(.+)",
+            llm_for_query.predict(query_prompt_template.format(user_query=inputs["user_query"]))
+        ).group(1).strip(),
         "user_query": inputs["user_query"]
     }
 )
 
-# Chain step 2: For the retrieved file IDs, query for chunks (3 best matching chunks per file)
+# Chain step 1: Retrieve file IDs (5 most relevant files) using the refined query.
+file_query_chain = RunnableLambda(
+    func=lambda inputs: {
+        "file_ids": query_for_file(
+            user_query=inputs["refined_query"],
+            top_k=5  # Query 5 most relevant files
+        ),
+        "user_query": inputs["user_query"],
+    }
+)
+
+# Chain step 2: For the retrieved file IDs, query for chunks (3 best matching chunks per file) using the refined query.
 chunks_query_chain = RunnableLambda(
     func=lambda inputs: {
         "chunks": query_for_chunks(
-            user_query=inputs["user_query"],
+            user_query=inputs["refined_query"],
             file_ids=inputs["file_ids"],
             top_k=3  # Query 3 best-matching chunks per file
         ),
         "user_query": inputs["user_query"],
-        "consulted_files": [file_id.removeprefix("/content/drive/MyDrive/") for file_id in inputs["file_ids"]]
+        "consulted_files": [
+            file_id.removeprefix("/content/drive/MyDrive/") 
+            for file_id in inputs["file_ids"]
+        ]
     }
 )
 
@@ -143,19 +157,29 @@ response_chain = RunnableLambda(
             user_query=inputs["user_query"]
         ),
         "consulted_files": inputs["consulted_files"]
-
     }
 ) | RunnableLambda(
     func=lambda inputs: {
         "response": llm_for_response.predict(
-            response_prompt=inputs["response_prompt"]
+            formatted_prompt=inputs["response_prompt"]
         ),
         **inputs
     }
 )
 
-# Combine all the chains to form the full workflow
-full_chain = file_query_chain | chunks_query_chain | aggregation_chain | response_chain
+# Combine all the chains to form the full workflow.
+full_chain = (
+    refine_query_chain
+    | debug_step("After Query Formatting")
+    | file_query_chain
+    | debug_step("After Finding Files")
+    | chunks_query_chain
+    | debug_step("After Finding Chunks")
+    | aggregation_chain
+    | debug_step("After Aggregating")
+    | response_chain
+)
+
 print("First intialization")
 
 def generate_response(user_query: str):
@@ -163,5 +187,6 @@ def generate_response(user_query: str):
     result = full_chain.invoke(input={"user_query": user_query})
     response = result["response"]
     consulted_files = result["consulted_files"]
-    final_response = response + f"\n\n Nguồn thông tin: {'\n- '.join(consulted_files)}"
+    response_ending = "\n\n Nguồn thông tin:" + {'\n- '.join(consulted_files)}
+    final_response = response + response_ending
     return final_response

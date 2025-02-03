@@ -49,3 +49,15 @@ def convert_bold_to_html(text: str) -> str:
             i += 1
 
     return "".join(result)
+
+def markdown_to_custom_html(text):
+    """Converts markdown text (bold, new lines) into custom HTML with <span> and <br> formatting."""
+    
+    # Convert **bold** to <span class="r1">...</span>
+    text = re.sub(r"\*\*(.*?)\*\*", r'<span class="r1">\1</span>', text)
+    
+    # Convert \n to <br>
+    text = text.replace("\n", "<br>")
+
+    # Wrap in <code> tag
+    return "<style>.r1 {font-weight: bold}</style>" + f'<code style="font-family:inherit">{text}</code>'

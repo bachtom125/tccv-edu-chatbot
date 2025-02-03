@@ -1,14 +1,14 @@
 import pinecone
 from pinecone import Pinecone
 from langchain_openai import ChatOpenAI
-from pipeline.embeddings import HuggingFaceEmbeddings
+from .embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSequence, RunnableLambda
 from langchain_pinecone import PineconeVectorStore
 import re
 import os
 from dotenv import load_dotenv
-from pipeline.utils import convert_bold_to_html
+from .utils import convert_bold_to_html, markdown_to_custom_html
 
 load_dotenv()
 PINECONE_API = os.getenv("PINECONE_API_KEY")
@@ -121,6 +121,7 @@ file_query_chain = RunnableLambda(
             top_k=5  # Query 5 most relevant files
         ),
         "user_query": inputs["user_query"],
+        "refined_query": inputs["refined_query"]
     }
 )
 
@@ -159,12 +160,15 @@ response_chain = RunnableLambda(
         "consulted_files": inputs["consulted_files"]
     }
 ) | RunnableLambda(
-    func=lambda inputs: {
-        "response": llm_for_response.predict(
-            formatted_prompt=inputs["response_prompt"]
-        ),
-        **inputs
-    }
+    func=lambda inputs: (
+        lambda response: {
+            "response": response.content,
+            "prompt_tokens": response.response_metadata["token_usage"]["prompt_tokens"],
+            "completion_tokens": response.response_metadata["token_usage"]["completion_tokens"],
+            "total_tokens": response.response_metadata["token_usage"]["total_tokens"],
+            "consulted_files": inputs["consulted_files"]
+        }
+    )(llm_for_response.invoke(inputs["response_prompt"]))
 )
 
 # Combine all the chains to form the full workflow.
@@ -174,9 +178,9 @@ full_chain = (
     | file_query_chain
     | debug_step("After Finding Files")
     | chunks_query_chain
-    | debug_step("After Finding Chunks")
+    # | debug_step("After Finding Chunks")
     | aggregation_chain
-    | debug_step("After Aggregating")
+    # | debug_step("After Aggregating")
     | response_chain
 )
 
@@ -187,6 +191,12 @@ def generate_response(user_query: str):
     result = full_chain.invoke(input={"user_query": user_query})
     response = result["response"]
     consulted_files = result["consulted_files"]
-    response_ending = "\n\n Nguồn thông tin:" + {'\n- '.join(consulted_files)}
+    response_ending = "\n\n Nguồn thông tin:" + "\n- " + "\n- ".join(consulted_files)
+
+    # print token count
+    print(f"Prompt Tokens: {result['prompt_tokens']}")
+    print(f"Completion Tokens: {result['completion_tokens']}")
+    print(f"Total Tokens: {result['total_tokens']}")
+    
     final_response = response + response_ending
     return final_response

@@ -91,7 +91,7 @@ query_prompt_template = PromptTemplate(
 response_generation_prompt = PromptTemplate(
     input_variables=["context", "user_query"],
     template=(
-        "You are an expert with strong expertise in carbon credits. Based on the following context, respond to the user's query. Try to give a very long response that is as detailed as possible, with lots of information. And remember to be factual:\n\n"
+        "You are an expert in carbon credits. Based on the following context, respond to the user's query. Try to give a very long response that is as detailed and informative as possible while still being factual and on-topic. Also, respond in the same language the user query is in, regardless of the language of the context and everything else. :\n\n"
         "Context: {context}\n\n"
         "User Query: {user_query}\n\n"
         "Response:"
@@ -199,4 +199,4 @@ def generate_response(user_query: str):
     print(f"Total Tokens: {result['total_tokens']}")
     
     final_response = response + response_ending
-    return final_response
+    return markdown_to_custom_html(final_response)

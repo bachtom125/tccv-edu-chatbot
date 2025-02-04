@@ -191,7 +191,7 @@ def generate_response(user_query: str):
     result = full_chain.invoke(input={"user_query": user_query})
     response = result["response"]
     consulted_files = result["consulted_files"]
-    response_ending = "\n\n Nguồn thông tin:" + "\n- " + "\n- ".join(consulted_files)
+    response_ending = "\n\n**Nguồn thông tin/Information Source:**" + "\n- " + "\n- ".join(consulted_files)
 
     # print token count
     print(f"Prompt Tokens: {result['prompt_tokens']}")
@@ -199,4 +199,4 @@ def generate_response(user_query: str):
     print(f"Total Tokens: {result['total_tokens']}")
     
     final_response = response + response_ending
-    return markdown_to_custom_html(final_response)
+    return final_response

@@ -61,6 +61,7 @@ def markdown_to_custom_html(text):
     text = text.replace("\n", "<br>")
 
     # Wrap in <code> tag
+<<<<<<< HEAD
     return "<style>.r1 {font-weight: bold}</style>" + f'<code style="font-family:inherit">{text}</code>'
 
 def duckduckgo_search(query: str, max_results: int = 5):
@@ -78,3 +79,6 @@ def duckduckgo_search(query: str, max_results: int = 5):
     results = search_tool.run(query, num_results=max_results)
 
     return results # list[dict(snippet, title, link)]
+=======
+    return "<style>.r1 {font-weight: bold}</style>" + f'<code style="font-family:inherit">{text}</code>'
+>>>>>>> f1c30b2147c12655f60606ac04eb882ccfdfc0cb

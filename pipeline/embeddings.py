@@ -1,3 +1,5 @@
+# embedding script (run on Google Colab): https://colab.research.google.com/drive/1D4BnRqCOWxQEBYT29Ix46r66bad-6ACH?authuser=1
+
 from transformers import pipeline, AutoTokenizer, AutoModelForQuestionAnswering, AutoModel
 from langchain.embeddings.base import Embeddings
 from .utils import clean_vietnamese_text

@@ -1,4 +1,5 @@
 import re
+from langchain_community.tools.ddg_search.tool import DuckDuckGoSearchResults
 
 def clean_vietnamese_text(text):
     """
@@ -49,3 +50,31 @@ def convert_bold_to_html(text: str) -> str:
             i += 1
 
     return "".join(result)
+
+def markdown_to_custom_html(text):
+    """Converts markdown text (bold, new lines) into custom HTML with <span> and <br> formatting."""
+    
+    # Convert **bold** to <span class="r1">...</span>
+    text = re.sub(r"\*\*(.*?)\*\*", r'<span class="r1">\1</span>', text)
+    
+    # Convert \n to <br>
+    text = text.replace("\n", "<br>")
+
+    # Wrap in <code> tag
+    return "<style>.r1 {font-weight: bold}</style>" + f'<code style="font-family:inherit">{text}</code>'
+
+def duckduckgo_search(query: str, max_results: int = 5):
+    """
+    Perform a DuckDuckGo search and return structured results.
+    
+    Parameters:
+        query (str): The search query.
+        max_results (int): Number of results to retrieve.
+        
+    Returns:
+        list[dict]: A list of dictionaries containing title, link, and snippet.
+    """
+    search_tool = DuckDuckGoSearchResults(output_format="list")
+    results = search_tool.run(query, num_results=max_results)
+
+    return results # list[dict(snippet, title, link)]

@@ -39,3 +39,9 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# notebooks
+.ipynb_checkpoints
+*.ipynb
+# cache
+__pycache__

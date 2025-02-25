@@ -34,7 +34,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def query_backend(user_message):
     async with aiohttp.ClientSession() as session:
-        async with session.post("https://carboncredits-tccv-edu-chatbot.hf.space/query", json={"user_message": user_message}) as resp:
+        async with session.post("https://carboncredits-tccv-edu-chatbot.hf.space/api/send-message", json={"user_message": user_message}) as resp:
             response_data = await resp.json()
             return response_data["response"]
 

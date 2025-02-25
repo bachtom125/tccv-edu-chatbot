@@ -1,20 +1,25 @@
-from fastapi import FastAPI
-from pipeline.query_handler import handle_query
+from fastapi import FastAPI, Depends, HTTPException, Header
 from pydantic import BaseModel
+# from firebase.firebase_auth import verify_firebase_token
+from fastapi.responses import StreamingResponse
+from pipeline.langchain_bot import full_chain, parse_input
 
 app = FastAPI()
 
 class UserRequest(BaseModel):
     user_message: str
 
-# health check
+# Health check
 @app.get('/')
 async def health_check():
     return {"status": "ok"}
 
-@app.post("/query")
-async def query_pipeline(request: UserRequest):
+@app.post("/api/send-message")
+async def stream_response(user_input: dict):
+    past_messages, user_query = parse_input(user_input["messages"])
     
-    user_message = request.user_message
-    response = await handle_query(user_message)
-    return {"response": response}
+    # Create input for full chain
+    chain_inputs = {"user_query": user_query, "past_messages": past_messages}
+
+    # ✅ Directly return the async generator
+    return StreamingResponse(full_chain.invoke(chain_inputs), media_type="text/plain")

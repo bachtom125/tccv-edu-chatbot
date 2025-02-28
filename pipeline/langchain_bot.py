@@ -81,10 +81,14 @@ def refine_query(user_query: str, past_messages: str):
     refined_query = re.search(r"Constructed Query:\s*(.+)", response).group(1).strip()
     return refined_query
 
-def aggregate_context(chunks: list[str], refined_query: str):
-    context = "\n".join(chunks)
-    additional_context = duckduckgo_search(refined_query, max_results=3)
-    return f"{context}\n\n**Additional Context from DuckDuckGo Web Search:**\n{additional_context}"
+def fetch_vector_search_context(chunks: list[str]):
+    return "\n".join(chunks)
+
+def fetch_web_search_context(refined_query: str):
+    return duckduckgo_search(refined_query, max_results=3)
+
+def aggregate_context(vector_search_context: str, web_search_context: str):
+    return f"{vector_search_context}\n\n**Additional Context from DuckDuckGo Web Search:**\n{web_search_context}"
 
 def generate_response(context: str, user_query: str, refined_query: str, consulted_files: list[str], past_messages: str):
     response_prompt = response_generation_prompt.format(
@@ -106,7 +110,9 @@ def run_query_pipeline(user_query: str, past_messages: str):
     refined_query = refine_query(user_query, past_messages)
     file_ids = query_for_file(refined_query, NUM_FILE_TO_FETCH)
     chunks = query_for_chunks(refined_query, file_ids, NUM_CHUNK_TO_FETCH_PER_FILE)
-    context = aggregate_context(chunks, refined_query)
+    vector_search_context = fetch_vector_search_context(chunks)
+    web_search_context = fetch_web_search_context(refined_query)
+    context = aggregate_context(vector_search_context, web_search_context)
     response_prompt = generate_response(context, user_query, refined_query, file_ids, past_messages)
     return response_prompt
 

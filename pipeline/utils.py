@@ -61,7 +61,6 @@ def markdown_to_custom_html(text):
     text = text.replace("\n", "<br>")
 
     # Wrap in <code> tag
-<<<<<<< HEAD
     return "<style>.r1 {font-weight: bold}</style>" + f'<code style="font-family:inherit">{text}</code>'
 
 def duckduckgo_search(query: str, max_results: int = 5):
@@ -79,6 +78,26 @@ def duckduckgo_search(query: str, max_results: int = 5):
     results = search_tool.run(query, num_results=max_results)
 
     return results # list[dict(snippet, title, link)]
-=======
-    return "<style>.r1 {font-weight: bold}</style>" + f'<code style="font-family:inherit">{text}</code>'
->>>>>>> f1c30b2147c12655f60606ac04eb882ccfdfc0cb
+
+def parse_input(messages):
+    assistant_responses = []
+    user_messages = []
+
+    for msg in messages:
+        role = msg["role"].capitalize()  # Capitalize role for formatting
+        content = msg["content"]
+        
+        if role == "Assistant":
+            assistant_responses.append(f"Assistant's Response: {content}")
+            # parsed_output.append(f"Assistant's Response: {content}")
+        elif role == "User":
+            user_messages.append(f"User's Message: {content}")
+            # parsed_output.append(f"User's Message: {content}")
+    
+    if len(assistant_responses) == 0:
+      assistant_responses.append("")
+    if len(user_messages) == 0:
+      user_messages.append("User's Message: \"")
+
+    return "\n".join(user_messages[:-1]) + f"\n{assistant_responses[-1]}", user_messages[-1][len("User's Message: "):]
+    

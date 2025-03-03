@@ -2,7 +2,8 @@ from fastapi import FastAPI, Depends, HTTPException, Header
 from pydantic import BaseModel
 # from firebase.firebase_auth import verify_firebase_token
 from fastapi.responses import StreamingResponse
-from pipeline.langchain_bot import full_chain, parse_input
+from pipeline.langchain_bot import full_workflow
+from pipeline.utils import parse_input
 
 app = FastAPI()
 
@@ -22,4 +23,4 @@ async def stream_response(user_input: dict):
     chain_inputs = {"user_query": user_query, "past_messages": past_messages}
 
     # ✅ Directly return the async generator
-    return StreamingResponse(full_chain.invoke(chain_inputs), media_type="text/plain")
+    return StreamingResponse(full_workflow(user_query, past_messages), media_type="text/plain")
